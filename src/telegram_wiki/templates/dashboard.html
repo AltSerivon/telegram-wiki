@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Telegram Wiki Curation</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 1100px; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ccc; padding: 0.4rem 0.5rem; text-align: left; font-size: 0.9rem; }
+    th { background: #f4f4f4; }
+    .muted { color: #666; font-size: 0.85rem; }
+    .row-junk { opacity: 0.45; }
+    h1 { font-size: 1.25rem; }
+    h2 { font-size: 1.05rem; margin-top: 1.5rem; }
+    form.inline { display: inline; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <nav style="margin-bottom:1rem;font-size:0.9rem;">
+    <a href="/control">Control room</a>
+    <a href="/"><strong>Curation</strong></a>
+  </nav>
+  <h1>Telegram → Company groups</h1>
+  <p class="muted">Obsidian vault: <code>{{ vault }}</code></p>
+
+  <h2>Create company group</h2>
+  <form method="post" action="/companies">
+    <label>Name <input name="name" required placeholder="Acme Corp"/></label>
+    <label>Slug (optional) <input name="slug" placeholder="acme"/></label>
+    <button type="submit">Create</button>
+  </form>
+
+  <h2>Company groups</h2>
+  {% if companies %}
+  <ul>
+    {% for c in companies %}
+    <li><strong>{{ c.name }}</strong> — <code>{{ c.slug }}</code> — <span class="muted">{{ c.vault_rel_path }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No groups yet.</p>
+  {% endif %}
+
+  <h2>Telegram peers</h2>
+  <p class="muted">Mark junk to exclude from ingest. Assign a peer to exactly one company group.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Type / id</th>
+        <th>Username</th>
+        <th>Junk</th>
+        <th>Assign to</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in peers %}
+      <tr class="{{ 'row-junk' if p.is_junk else '' }}">
+        <td>{{ p.title or '—' }}</td>
+        <td><code>{{ p.peer_type }}:{{ p.peer_id }}</code></td>
+        <td>{{ p.username or '—' }}</td>
+        <td>
+          <form class="inline" method="post" action="/peers/{{ p.id }}/junk">
+            <button type="submit">{{ 'Unjunk' if p.is_junk else 'Junk' }}</button>
+          </form>
+        </td>
+        <td>
+          <form class="inline" method="post" action="/memberships">
+            <input type="hidden" name="peer_id" value="{{ p.id }}"/>
+            <select name="company_group_id" required>
+              <option value="">—</option>
+              {% for c in companies %}
+              <option value="{{ c.id }}" {{ 'selected' if memberships.get(p.id) == c.id else '' }}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">Save</button>
+          </form>
+          {% if memberships.get(p.id) %}
+          <form class="inline" method="post" action="/memberships/clear" style="margin-left:0.25rem;">
+            <input type="hidden" name="peer_id" value="{{ p.id }}"/>
+            <button type="submit">Clear</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Control room — Telegram Wiki</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 1100px; }
+    nav { margin-bottom: 1rem; font-size: 0.9rem; }
+    nav a { margin-right: 1rem; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ccc; padding: 0.4rem 0.5rem; text-align: left; font-size: 0.9rem; vertical-align: top; }
+    th { background: #f4f4f4; }
+    .muted { color: #666; font-size: 0.85rem; }
+    h1 { font-size: 1.25rem; }
+    h2 { font-size: 1.05rem; margin-top: 1.5rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+    .card { border: 1px solid #ccc; border-radius: 6px; padding: 0.6rem 0.75rem; background: #fafafa; }
+    .card strong { font-size: 1.35rem; display: block; }
+    .ok { color: #0a7; }
+    .warn { color: #a60; }
+    .bad { color: #c33; }
+    code { font-size: 0.85rem; word-break: break-all; }
+    pre.cli { background: #f4f4f4; padding: 0.75rem; overflow-x: auto; font-size: 0.8rem; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/control"><strong>Control room</strong></a>
+    <a href="/">Curation</a>
+  </nav>
+
+  <h1>Control room</h1>
+  <p class="muted">Read-only status for ingest cursors, wiki runs, and local configuration. Run commands in a terminal.</p>
+
+  <h2>Health</h2>
+  <ul class="muted">
+    <li>Telegram session file:
+      {% if session_file_ok %}<span class="ok">present</span>{% else %}<span class="bad">missing</span> — run <code>telegram-wiki login</code>{% endif %}
+      — <code>{{ session_path }}</code>
+    </li>
+    <li>LLM: {% if llm_configured %}<span class="ok">API key set</span>{% else %}<span class="warn">no API key</span> — wiki updates need <code>OPENAI_API_KEY</code>{% endif %}
+      — model <code>{{ wiki_model }}</code>
+      {% if openai_base_url %}<br/>Base URL: <code>{{ openai_base_url }}</code>{% endif %}
+    </li>
+    <li>Database: <code>{{ database_url }}</code></li>
+    <li>Vault: <code>{{ vault_path }}</code></li>
+    <li>Wiki output folder: <code>{{ wiki_bucket_abs }}</code> <span class="muted">(<code>{{ wiki_bucket_rel }}/</code> inside vault)</span></li>
+    <li>Ingest cap (messages per peer per run): <strong>{{ ingest_cap }}</strong></li>
+  </ul>
+
+  <h2>Counts</h2>
+  <div class="grid">
+    <div class="card"><span class="muted">Peers</span><strong>{{ n_peers }}</strong></div>
+    <div class="card"><span class="muted">Company groups</span><strong>{{ n_companies }}</strong></div>
+    <div class="card"><span class="muted">Assignments</span><strong>{{ n_memberships }}</strong></div>
+    <div class="card"><span class="muted">Ingest cursors</span><strong>{{ n_cursors }}</strong></div>
+    <div class="card"><span class="muted">Wiki runs (total)</span><strong>{{ n_wiki_runs }}</strong></div>
+  </div>
+
+  <h2>Recent wiki runs</h2>
+  {% if wiki_rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>Started</th>
+        <th>Company</th>
+        <th>Model</th>
+        <th>Status</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run, cname, cslug in wiki_rows %}
+      <tr>
+        <td>{{ run.started_at }} {% if run.finished_at %}<span class="muted"><br/>→ {{ run.finished_at }}</span>{% endif %}</td>
+        <td><strong>{{ cname }}</strong><br/><code class="muted">{{ cslug }}</code></td>
+        <td>{{ run.model or '—' }}</td>
+        <td>{% if run.finished_at %}{% if run.success %}<span class="ok">ok</span>{% else %}<span class="bad">failed</span>{% endif %}{% else %}<span class="warn">running?</span>{% endif %}</td>
+        <td>{% if run.error_message %}<code>{{ run.error_message[:500] }}{% if run.error_message|length > 500 %}…{% endif %}</code>{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No wiki runs recorded yet.</p>
+  {% endif %}
+
+  <h2>Ingest cursors</h2>
+  {% if cursor_rows %}
+  <p class="muted">Last message id stored per peer (newer messages have higher ids). Recently updated first.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Peer</th>
+        <th>Telegram id</th>
+        <th>Last message id</th>
+        <th>Cursor updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cur, peer in cursor_rows %}
+      <tr>
+        <td>{{ peer.title or '—' }}</td>
+        <td><code>{{ peer.peer_type }}:{{ peer.peer_id }}</code></td>
+        <td>{{ cur.last_message_id }}</td>
+        <td>{{ cur.updated_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No ingest cursors yet — ingest a company group to populate.</p>
+  {% endif %}
+
+  <h2>CLI</h2>
+  <pre class="cli">telegram-wiki discover
+telegram-wiki ingest --all
+telegram-wiki wiki-update --all
+# or
+telegram-wiki run-daily</pre>
+</body>
+</html>
