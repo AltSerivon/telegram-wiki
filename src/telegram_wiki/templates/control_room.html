@@ -20,8 +20,21 @@
     .ok { color: #0a7; }
     .warn { color: #a60; }
     .bad { color: #c33; }
+    .stale { color: #a60; font-weight: 600; }
     code { font-size: 0.85rem; word-break: break-all; }
     pre.cli { background: #f4f4f4; padding: 0.75rem; overflow-x: auto; font-size: 0.8rem; border-radius: 6px; }
+    .banner { border-radius: 6px; padding: 0.6rem 0.75rem; margin: 0.75rem 0; }
+    .banner.error { background: #ffe8e8; border: 1px solid #f99; }
+    .banner.notice { background: #e8f4ff; border: 1px solid #9cf; }
+    .banner.run { background: #fff8e6; border: 1px solid #ec6; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin: 0.5rem 0 1rem; }
+    .actions form { border: 1px solid #ddd; border-radius: 6px; padding: 0.5rem 0.6rem; background: #fafafa; }
+    .actions label { display: block; font-size: 0.8rem; margin-bottom: 0.25rem; }
+    .actions button { margin-top: 0.35rem; }
+    .pager { margin: 0.5rem 0; font-size: 0.9rem; }
+    .pager a { margin-right: 0.75rem; }
+    .filter a { margin-right: 0.5rem; }
+    .filter a.on { font-weight: 700; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -31,7 +44,65 @@
   </nav>
 
   <h1>Control room</h1>
-  <p class="muted">Read-only status for ingest cursors, wiki runs, and local configuration. Run commands in a terminal.</p>
+  <p class="muted">Status, recent wiki runs, ingest cursors, and <strong>background</strong> pipeline actions. Commands still work in a terminal; this UI queues the same work without blocking the browser.</p>
+  <p class="muted">Security: keep <code>telegram-wiki serve</code> on <code>127.0.0.1</code> — these POST endpoints can trigger Telegram and LLM calls.</p>
+
+  {% if flash_error %}
+  <div class="banner error">{{ flash_error }}</div>
+  {% endif %}
+  {% if flash_notice %}
+  <div class="banner notice">{{ flash_notice }}</div>
+  {% endif %}
+  {% if pipeline.running %}
+  <div class="banner run">Pipeline running: <strong>{{ pipeline.running }}</strong> — refresh to see updated counts and tables.</div>
+  {% endif %}
+  {% if pipeline.last_job and not pipeline.running %}
+  <div class="banner {% if pipeline.last_ok %}notice{% else %}error{% endif %}">
+    Last job <strong>{{ pipeline.last_job }}</strong>
+    {% if pipeline.last_finished_at %}<span class="muted">({{ pipeline.last_finished_at }})</span>{% endif %}:
+    {% if pipeline.last_ok %}finished{% else %}failed{% endif %}
+    {% if pipeline.last_message %} — <code>{{ pipeline.last_message }}</code>{% endif %}
+  </div>
+  {% endif %}
+
+  <h2>Run pipeline</h2>
+  <p class="muted">Optional company limits ingest / wiki / daily to one slug; leave “All groups” for every company row.</p>
+  <div class="actions">
+    <form method="post" action="/control/actions/discover">
+      <label>Discover dialogs</label>
+      <button type="submit">Discover</button>
+    </form>
+    <form method="post" action="/control/actions/ingest">
+      <label>Company (optional)</label>
+      <select name="company_slug">
+        <option value="">All groups</option>
+        {% for c in companies %}
+        <option value="{{ c.slug }}">{{ c.name }} ({{ c.slug }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Ingest</button>
+    </form>
+    <form method="post" action="/control/actions/wiki-update">
+      <label>Company (optional)</label>
+      <select name="company_slug">
+        <option value="">All groups</option>
+        {% for c in companies %}
+        <option value="{{ c.slug }}">{{ c.name }} ({{ c.slug }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Wiki update</button>
+    </form>
+    <form method="post" action="/control/actions/run-daily">
+      <label>Company (optional)</label>
+      <select name="company_slug">
+        <option value="">All groups</option>
+        {% for c in companies %}
+        <option value="{{ c.slug }}">{{ c.name }} ({{ c.slug }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Run daily</button>
+    </form>
+  </div>
 
   <h2>Health</h2>
   <ul class="muted">
@@ -43,7 +114,7 @@
       — model <code>{{ wiki_model }}</code>
       {% if openai_base_url %}<br/>Base URL: <code>{{ openai_base_url }}</code>{% endif %}
     </li>
-    <li>Database: <code>{{ database_url }}</code></li>
+    <li>Database (redacted): <code>{{ database_url }}</code></li>
     <li>Vault: <code>{{ vault_path }}</code></li>
     <li>Wiki output folder: <code>{{ wiki_bucket_abs }}</code> <span class="muted">(<code>{{ wiki_bucket_rel }}/</code> inside vault)</span></li>
     <li>Ingest cap (messages per peer per run): <strong>{{ ingest_cap }}</strong></li>
@@ -59,7 +130,14 @@
   </div>
 
   <h2>Recent wiki runs</h2>
-  {% if wiki_rows %}
+  <p class="filter muted">
+    Filter:
+    <a href="/control?wiki_filter=all&wiki_page=0&cursor_page={{ cursor_page }}" class="{% if wiki_filter == 'all' %}on{% endif %}">All</a>
+    <a href="/control?wiki_filter=failed&wiki_page=0&cursor_page={{ cursor_page }}" class="{% if wiki_filter == 'failed' %}on{% endif %}">Failed</a>
+    <a href="/control?wiki_filter=unfinished&wiki_page=0&cursor_page={{ cursor_page }}" class="{% if wiki_filter == 'unfinished' %}on{% endif %}">Unfinished</a>
+    <span class="muted">— {{ wiki_total_filtered }} match(es), page {{ wiki_page + 1 }} of {{ wiki_total_pages }}</span>
+  </p>
+  {% if wiki_display %}
   <table>
     <thead>
       <tr>
@@ -71,24 +149,39 @@
       </tr>
     </thead>
     <tbody>
-      {% for run, cname, cslug in wiki_rows %}
+      {% for row in wiki_display %}
       <tr>
-        <td>{{ run.started_at }} {% if run.finished_at %}<span class="muted"><br/>→ {{ run.finished_at }}</span>{% endif %}</td>
-        <td><strong>{{ cname }}</strong><br/><code class="muted">{{ cslug }}</code></td>
-        <td>{{ run.model or '—' }}</td>
-        <td>{% if run.finished_at %}{% if run.success %}<span class="ok">ok</span>{% else %}<span class="bad">failed</span>{% endif %}{% else %}<span class="warn">running?</span>{% endif %}</td>
-        <td>{% if run.error_message %}<code>{{ run.error_message[:500] }}{% if run.error_message|length > 500 %}…{% endif %}</code>{% else %}—{% endif %}</td>
+        <td>{{ row.started_at }} {% if row.finished_at %}<span class="muted"><br/>→ {{ row.finished_at }}</span>{% endif %}</td>
+        <td><strong>{{ row.cname }}</strong><br/><code class="muted">{{ row.cslug }}</code></td>
+        <td>{{ row.model or '—' }}</td>
+        <td>
+          {% if row.status_key == 'ok' %}<span class="ok">ok</span>
+          {% elif row.status_key == 'failed' %}<span class="bad">failed</span>
+          {% elif row.status_key == 'stale' %}<span class="stale" title="No finish time and started over 2h ago — likely interrupted">incomplete</span>
+          {% else %}<span class="warn" title="No finish time yet">in progress</span>
+          {% endif %}
+          <span class="muted"><br/>{{ row.status_label }}</span>
+        </td>
+        <td>{% if row.error_message %}<code>{{ row.error_message[:500] }}{% if row.error_message|length > 500 %}…{% endif %}</code>{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  <div class="pager">
+    {% if wiki_page > 0 %}
+    <a href="/control?wiki_filter={{ wiki_filter }}&wiki_page={{ wiki_page - 1 }}&cursor_page={{ cursor_page }}">← Newer</a>
+    {% endif %}
+    {% if wiki_page + 1 < wiki_total_pages %}
+    <a href="/control?wiki_filter={{ wiki_filter }}&wiki_page={{ wiki_page + 1 }}&cursor_page={{ cursor_page }}">Older →</a>
+    {% endif %}
+  </div>
   {% else %}
-  <p class="muted">No wiki runs recorded yet.</p>
+  <p class="muted">No wiki runs in this view.</p>
   {% endif %}
 
   <h2>Ingest cursors</h2>
-  {% if cursor_rows %}
-  <p class="muted">Last message id stored per peer (newer messages have higher ids). Recently updated first.</p>
+  <p class="muted">Last message id stored per peer (newer messages have higher ids). Recently updated first. Page {{ cursor_page + 1 }} of {{ cursor_total_pages }} ({{ cursor_total }} total).</p>
+  {% if cursor_display %}
   <table>
     <thead>
       <tr>
@@ -99,18 +192,26 @@
       </tr>
     </thead>
     <tbody>
-      {% for cur, peer in cursor_rows %}
+      {% for row in cursor_display %}
       <tr>
-        <td>{{ peer.title or '—' }}</td>
-        <td><code>{{ peer.peer_type }}:{{ peer.peer_id }}</code></td>
-        <td>{{ cur.last_message_id }}</td>
-        <td>{{ cur.updated_at }}</td>
+        <td>{{ row.peer_title }}</td>
+        <td><code>{{ row.peer_telegram_id }}</code></td>
+        <td>{{ row.last_message_id }}</td>
+        <td>{{ row.updated_at }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  <div class="pager">
+    {% if cursor_page > 0 %}
+    <a href="/control?wiki_filter={{ wiki_filter }}&wiki_page={{ wiki_page }}&cursor_page={{ cursor_page - 1 }}">← Prev page</a>
+    {% endif %}
+    {% if cursor_page + 1 < cursor_total_pages %}
+    <a href="/control?wiki_filter={{ wiki_filter }}&wiki_page={{ wiki_page }}&cursor_page={{ cursor_page + 1 }}">Next page →</a>
+    {% endif %}
+  </div>
   {% else %}
-  <p class="muted">No ingest cursors yet — ingest a company group to populate.</p>
+  <p class="muted">No ingest cursors on this page — ingest a company group to populate.</p>
   {% endif %}
 
   <h2>CLI</h2>

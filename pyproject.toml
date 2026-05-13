@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0"]
+dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0", "pytest-timeout>=2.3.0"]
 
 [project.scripts]
 telegram-wiki = "telegram_wiki.cli:app"
@@ -34,3 +34,5 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+timeout = 120
+pythonpath = ["src"]

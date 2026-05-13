@@ -48,6 +48,22 @@ Company data is written under:
 
 `$OBSIDIAN_VAULT_PATH/_telegram_wiki/<slug>/`
 
+## Tests
+
+After `pip install -e ".[dev]"`, run:
+
+```bash
+pytest
+```
+
+If you still see `ModuleNotFoundError: No module named 'telegram_wiki'` (common when the project or venv lives on iCloud Drive and editable `.pth` files are skipped), either fix the hidden `.pth` flag as in [Troubleshooting](#troubleshooting) below, or run once with:
+
+```bash
+PYTHONPATH=src pytest
+```
+
+The repo’s `pyproject.toml` also sets `pythonpath = ["src"]` for pytest so `pytest` usually works even when editable installs are flaky.
+
 ## Daily schedule (macOS)
 
 Use `launchd` so `run-daily` runs once per day (example loads `.env` from your project directory):
