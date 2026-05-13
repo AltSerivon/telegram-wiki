@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from telegram_wiki import pipeline_runner
-from telegram_wiki.db.models import CompanyGroup, WikiRun
+from telegram_wiki.db.models import CompanyGroup, TelegramPeer, WikiRun
 from telegram_wiki.db.session import session_scope
 from telegram_wiki.url_redact import redact_database_url
 
@@ -47,6 +47,24 @@ def test_control_room_ok(control_client: TestClient):
     assert "Recent wiki runs" in r.text
     assert "Run pipeline" in r.text
     assert "Database (redacted)" in r.text
+
+
+def test_dashboard_ok_with_peers(control_client: TestClient):
+    """Regression: ORM peers must not be passed to Jinja after session closes (DetachedInstanceError)."""
+    with session_scope() as session:
+        session.add(
+            TelegramPeer(
+                peer_type="channel",
+                peer_id=999001,
+                access_hash=1,
+                username="chan",
+                title="Test Channel",
+            )
+        )
+    r = control_client.get("/")
+    assert r.status_code == 200
+    assert "Test Channel" in r.text
+    assert "chan" in r.text
 
 
 def test_redact_database_url_unit():

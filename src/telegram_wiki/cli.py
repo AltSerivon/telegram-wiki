@@ -45,13 +45,40 @@ def login():
     asyncio.run(go())
 
 
+@app.command("clear-db")
+def clear_db_cmd(
+    all_data: bool = typer.Option(
+        False,
+        "--all",
+        help="Also remove company groups, wiki runs, and processed-file bookkeeping.",
+    ),
+):
+    """Remove stored Telegram peers (and related rows) so the next discover starts clean."""
+    from telegram_wiki.crud import clear_database_for_discover, clear_entire_database
+
+    init_db()
+    with session_scope() as session:
+        stats = clear_entire_database(session) if all_data else clear_database_for_discover(session)
+    parts = [f"{k}={v}" for k, v in stats.items()]
+    typer.echo("Cleared: " + ", ".join(parts))
+
+
 @app.command()
-def discover():
+def discover(
+    fresh: bool = typer.Option(
+        False,
+        "--fresh",
+        help="Clear Telegram peer tables (memberships, cursors, peers) before importing.",
+    ),
+):
     """Import dialogs from Telegram into the local peer list."""
+    from telegram_wiki.crud import clear_database_for_discover
     from telegram_wiki.ingest import discover_dialogs
 
     init_db()
     with session_scope() as session:
+        if fresh:
+            clear_database_for_discover(session)
         n = asyncio.run(discover_dialogs(session))
     typer.echo(f"Imported {n} dialogs into database.")
 

@@ -80,9 +80,25 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def dashboard(request: Request):
         with session_scope() as session:
-            peers = list(session.scalars(select(TelegramPeer).order_by(TelegramPeer.title, TelegramPeer.id)).all())
-            companies = list(session.scalars(select(CompanyGroup).order_by(CompanyGroup.name)).all())
+            peer_rows = session.scalars(select(TelegramPeer).order_by(TelegramPeer.title, TelegramPeer.id)).all()
+            company_rows = session.scalars(select(CompanyGroup).order_by(CompanyGroup.name)).all()
             memberships = {m.telegram_peer_id: m.company_group_id for m in session.scalars(select(Membership)).all()}
+            # Plain dicts: after commit/close, ORM instances expire and Jinja would raise DetachedInstanceError.
+            peers = [
+                {
+                    "id": p.id,
+                    "title": p.title,
+                    "username": p.username,
+                    "peer_type": p.peer_type,
+                    "peer_id": p.peer_id,
+                    "is_junk": p.is_junk,
+                }
+                for p in peer_rows
+            ]
+            companies = [
+                {"id": c.id, "name": c.name, "slug": c.slug, "vault_rel_path": c.vault_rel_path}
+                for c in company_rows
+            ]
         return templates.TemplateResponse(
             request,
             "dashboard.html",

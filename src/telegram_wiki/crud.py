@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from telegram_wiki.config import get_settings
-from telegram_wiki.db.models import CompanyGroup, IngestCursor, Membership, TelegramPeer
+from telegram_wiki.db.models import (
+    CompanyGroup,
+    IngestCursor,
+    Membership,
+    TelegramPeer,
+    WikiProcessedFile,
+    WikiRun,
+)
 from telegram_wiki.utc import utc_now
 from telegram_wiki.vault import ensure_company_vault, slugify
 
@@ -60,6 +67,36 @@ def create_company_group(session: Session, name: str, slug: str | None = None) -
     session.add(cg)
     session.flush()
     return cg
+
+
+def clear_database_for_discover(session: Session) -> dict[str, int]:
+    """Delete ingest cursors, company memberships, and Telegram peers for a clean discover run."""
+    n_cursor = session.execute(delete(IngestCursor)).rowcount or 0
+    n_mem = session.execute(delete(Membership)).rowcount or 0
+    n_peer = session.execute(delete(TelegramPeer)).rowcount or 0
+    return {
+        "ingest_cursors": n_cursor,
+        "memberships": n_mem,
+        "telegram_peers": n_peer,
+    }
+
+
+def clear_entire_database(session: Session) -> dict[str, int]:
+    """Delete all application rows including company groups and wiki bookkeeping."""
+    n_wpf = session.execute(delete(WikiProcessedFile)).rowcount or 0
+    n_wr = session.execute(delete(WikiRun)).rowcount or 0
+    n_mem = session.execute(delete(Membership)).rowcount or 0
+    n_cursor = session.execute(delete(IngestCursor)).rowcount or 0
+    n_peer = session.execute(delete(TelegramPeer)).rowcount or 0
+    n_cg = session.execute(delete(CompanyGroup)).rowcount or 0
+    return {
+        "wiki_processed_files": n_wpf,
+        "wiki_runs": n_wr,
+        "memberships": n_mem,
+        "ingest_cursors": n_cursor,
+        "telegram_peers": n_peer,
+        "company_groups": n_cg,
+    }
 
 
 def assign_peer_to_company(session: Session, peer_id: int, company_group_id: int, sort_order: int = 0) -> Membership:
