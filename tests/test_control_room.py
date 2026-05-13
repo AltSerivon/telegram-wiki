@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -65,7 +65,7 @@ def test_wiki_filter_failed(control_client: TestClient):
             WikiRun(
                 company_group_id=cg.id,
                 success=False,
-                finished_at=datetime.utcnow(),
+                finished_at=datetime.now(timezone.utc),
                 error_message="unit-test-failure",
             )
         )
@@ -82,7 +82,7 @@ def test_wiki_unfinished_stale_label(control_client: TestClient):
         cg = CompanyGroup(name="Beta", slug="beta", vault_rel_path="_telegram_wiki/beta")
         session.add(cg)
         session.flush()
-        old = datetime.utcnow() - timedelta(hours=5)
+        old = datetime.now(timezone.utc) - timedelta(hours=5)
         session.add(
             WikiRun(
                 company_group_id=cg.id,

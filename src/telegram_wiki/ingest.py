@@ -9,6 +9,7 @@ from telegram_wiki.config import get_settings
 from telegram_wiki.crud import get_or_create_cursor
 from telegram_wiki.db.models import CompanyGroup, Membership, TelegramPeer
 from telegram_wiki.telethon_service import build_input_peer, classify_entity, telegram_client
+from telegram_wiki.utc import utc_now
 from telegram_wiki.vault import company_abs_path, ensure_company_vault
 
 
@@ -114,7 +115,7 @@ async def ingest_company(session: Session, company: CompanyGroup) -> dict:
                 total_msgs += len(msgs)
 
             cursor.last_message_id = max_id
-            cursor.updated_at = datetime.utcnow()
+            cursor.updated_at = utc_now()
 
     session.flush()
     return {"peers": len(rows), "messages": total_msgs, "files": written_files}

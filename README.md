@@ -90,6 +90,17 @@ chflags nohidden .venv/lib/python3.*/site-packages/__editable__.telegram_wiki-*.
 
 Then run `python -c "import telegram_wiki"` again. Putting the virtualenv **outside** iCloud (e.g. under your home directory) avoids this class of issue.
 
+**Strong recommendation on iCloud:** keep the git checkout on iCloud if you like, but create the venv elsewhere, for example:
+
+```bash
+python3 -m venv ~/.venvs/telegram-wiki
+~/.venvs/telegram-wiki/bin/pip install -e "/path/to/telegram-info[dev]"
+```
+
+Use that interpreter for `telegram-wiki`, `pytest`, and editors.
+
+**Tests:** the project sets `pythonpath = ["src"]` under `[tool.pytest.ini_options]` so `pytest` can import the package even when editable `.pth` loading fails; see [Tests](#tests) above.
+
 ## Backup
 
 - Keep `data/` (SQLite + Telegram session) backed up privately — it is effectively a credential.

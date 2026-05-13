@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from telegram_wiki.db.models import CompanyGroup, IngestCursor, Membership, TelegramPeer
-from telegram_wiki.vault import ensure_company_vault, slugify
 from telegram_wiki.config import get_settings
+from telegram_wiki.db.models import CompanyGroup, IngestCursor, Membership, TelegramPeer
+from telegram_wiki.utc import utc_now
+from telegram_wiki.vault import ensure_company_vault, slugify
 
 
 def upsert_peer(
@@ -38,7 +37,7 @@ def upsert_peer(
         peer.access_hash = access_hash if access_hash is not None else peer.access_hash
         peer.username = username if username is not None else peer.username
         peer.title = title if title is not None else peer.title
-        peer.updated_at = datetime.utcnow()
+        peer.updated_at = utc_now()
     return peer
 
 

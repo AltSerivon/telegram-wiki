@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
 
 from openai import OpenAI
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from telegram_wiki.config import get_settings
 from telegram_wiki.db.models import CompanyGroup, WikiProcessedFile, WikiRun
+from telegram_wiki.utc import utc_now
 from telegram_wiki.vault import (
     company_abs_path,
     file_sha256,
@@ -150,7 +151,7 @@ def _mark_processed(session: Session, company_id: int, paths: list[Path], compan
         row = session.scalars(stmt).first()
         if row:
             row.content_hash = h
-            row.processed_at = datetime.utcnow()
+            row.processed_at = utc_now()
         else:
             session.add(
                 WikiProcessedFile(
@@ -169,7 +170,7 @@ def run_wiki_update(session: Session, company: CompanyGroup) -> WikiRun:
             success=False,
             error_message="OPENAI_API_KEY not set",
             model=settings.wiki_model,
-            finished_at=datetime.utcnow(),
+            finished_at=utc_now(),
         )
         session.add(wr)
         session.flush()
@@ -194,7 +195,7 @@ def run_wiki_update(session: Session, company: CompanyGroup) -> WikiRun:
             unprocessed = _unprocessed_raw_files(session, company, company_root)
             if not unprocessed:
                 run.success = True
-                run.finished_at = datetime.utcnow()
+                run.finished_at = utc_now()
                 session.flush()
                 return run
 
@@ -221,7 +222,7 @@ def run_wiki_update(session: Session, company: CompanyGroup) -> WikiRun:
             index_text = (company_root / "index.md").read_text(encoding="utf-8", errors="replace")[-40000:]
             log_tail = (company_root / "log.md").read_text(encoding="utf-8", errors="replace")[-20000:]
 
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            today = utc_now().strftime("%Y-%m-%d")
             user_intro = (
                 f"Company group: **{company.name}** (slug `{company.slug}`).\n"
                 f"Today (UTC): {today}.\n"
@@ -292,18 +293,18 @@ def run_wiki_update(session: Session, company: CompanyGroup) -> WikiRun:
                     )
             else:
                 run.error_message = "Max tool rounds exceeded"
-                run.finished_at = datetime.utcnow()
+                run.finished_at = utc_now()
                 session.flush()
                 return run
 
             _mark_processed(session, company.id, batch, company_root)
 
         run.success = True
-        run.finished_at = datetime.utcnow()
+        run.finished_at = utc_now()
     except Exception as exc:  # noqa: BLE001
         run.success = False
         run.error_message = str(exc)[:4000]
-        run.finished_at = datetime.utcnow()
+        run.finished_at = utc_now()
 
     session.flush()
     return run

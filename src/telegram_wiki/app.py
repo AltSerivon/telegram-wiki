@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from contextlib import asynccontextmanager
+from datetime import timedelta, timezone
 from functools import partial
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from telegram_wiki.db import init_db
 from telegram_wiki.db.models import CompanyGroup, IngestCursor, Membership, TelegramPeer, WikiRun
 from telegram_wiki.db.session import session_scope
 from telegram_wiki.url_redact import redact_database_url
+from telegram_wiki.utc import utc_now
 from telegram_wiki.vault import slugify
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -33,9 +35,11 @@ def _wiki_run_status(run: WikiRun) -> tuple[str, str]:
     started = run.started_at
     if started is None:
         return "running", "in progress"
-    if started.tzinfo is not None:
-        started = started.astimezone(timezone.utc).replace(tzinfo=None)
-    age = datetime.utcnow() - started
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    else:
+        started = started.astimezone(timezone.utc)
+    age = utc_now() - started
     if age > WIKI_STALE_AFTER:
         return "stale", "incomplete"
     return "running", "in progress"
@@ -58,18 +62,20 @@ def _flash_from_query(request: Request) -> tuple[str | None, str | None]:
     return flash_error, flash_notice
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass
+    init_db()
+    yield
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Telegram Wiki Curation")
-
-    @app.on_event("startup")
-    def _startup():
-        try:
-            from dotenv import load_dotenv
-
-            load_dotenv()
-        except ImportError:
-            pass
-        init_db()
+    app = FastAPI(title="Telegram Wiki Curation", lifespan=_lifespan)
 
     @app.get("/", response_class=HTMLResponse)
     def dashboard(request: Request):

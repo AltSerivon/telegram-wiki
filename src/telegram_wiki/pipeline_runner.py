@@ -11,6 +11,7 @@ from sqlalchemy import select
 from telegram_wiki.db import init_db
 from telegram_wiki.db.models import CompanyGroup
 from telegram_wiki.db.session import session_scope
+from telegram_wiki.utc import utc_now
 
 
 @dataclass
@@ -55,7 +56,7 @@ def _finish(kind: str, ok: bool, message: str | None) -> None:
     global _running, _last_finished_at, _last_job, _last_ok, _last_message
     with _lock:
         _running = None
-        _last_finished_at = datetime.utcnow()
+        _last_finished_at = utc_now()
         _last_job = kind
         _last_ok = ok
         _last_message = message
